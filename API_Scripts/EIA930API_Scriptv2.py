@@ -3,7 +3,8 @@ import pandas as pd
 import time
 
 # This script finds the max interface transfer at one time across whole FERC regions
-# v1 finds the max across each individual interface even if they are at different times
+# You will need an EIA API key to download the data (https://www.eia.gov/opendata/register.php). 
+# Copy the key into a file named API_Scripts/api_key.txt for use in this script. 
 
 def convert_headers(url, headers):
     '''
@@ -28,7 +29,7 @@ def convert_headers(url, headers):
             print("Unrecognized header type", key)
     return url
 
-api_key = open("api_key.txt", "r").readline()
+api_key = open("API_Scripts/api_key.txt", "r").readline()
 part1 = "https://api.eia.gov/v2/electricity/rto/interchange-data/data?"
 api = "api_key=" + api_key
 part1 += api
@@ -50,7 +51,7 @@ headers = {
     "length": 5000
 }
 ba_list = pd.read_csv("EIA BA Groupings\\EIA_allBAs.csv")["BAs"]
-ferc_mapping = pd.read_csv("Josh Files\\BA-lookup.csv")
+ferc_mapping = pd.read_csv("EIA-NAERM BA Mapping\\BA-lookup.csv")
 ferc_mapping.set_index("EIA BA", inplace=True)
 ferc_mapping = ferc_mapping.to_dict()["FERC-Region"]
 
@@ -58,7 +59,7 @@ start = "2021-01-01T00"
 end = "2024-01-01T00"
 periods = pd.date_range(start = start, end=end, freq="168H")
 
-# Loop through all the API calls I want
+# Loop through all the API calls
 max_dfs = []
 for i,period in enumerate(periods):
     print("PERIOD: ", period)
@@ -90,11 +91,16 @@ for i,period in enumerate(periods):
         time.sleep(0.3) #to not over-call the API
 
     df = pd.concat(dfs, axis=0)
-    df = df.groupby(["period","fromferc","toferc","fromba","toba"])["value"].sum().to_frame() # REMOVE BAs TO GET FERC REGION ONLY
+    # to get BA-level interregional transmission data:
+    df = df.groupby(["period","fromferc","toferc","fromba","toba"])["value"].sum().to_frame() 
+    # to get FERC region-level interregional transmission data: 
+    # df = df.groupby(["period","fromferc","toferc"])["value"].sum().to_frame() 
     max_dfs.append(df)
-df = pd.concat(max_dfs, axis=0)
+df = pd.concat(max_dfs, axis=0) # this is a df of all timestamps between start and end
+# Uncomment to calculate the maximum incident transmission across each FERC interface over the whole period
 # df = df.groupby(["fromferc", "toferc"])["value"].apply(lambda x: x.abs().max()).to_frame()
 
-
+# this produces a very large CSV (300+ GB) at the BA-level
+# further analysis done in historical_analysis.ipynb
 df.to_csv("EIA_BAlims_2021-2023v2_fullBAs.csv")
 
